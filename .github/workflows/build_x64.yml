@@ -1,0 +1,111 @@
+name: build-x64
+
+on:
+  push:
+    branches:
+      - x64-ci
+    paths-ignore:
+      - LICENSE
+      - README.md
+
+jobs:
+  build:
+    name: build with sm${{ matrix.sm_version }} on ${{ matrix.os_short }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+
+        sm_version:
+          - "1.12"
+
+        include:
+          - meta_version: "1.12"
+            meta_branch: "1.12-dev"
+
+          - sm_version: "1.12"
+            sm_branch: "1.12-dev"
+
+          - os: ubuntu-latest
+            os_short: linux
+
+          - os: windows-latest
+            os_short: win
+
+    steps:
+      - name: Prepare env
+        shell: bash
+        run: |
+          echo "GITHUB_SHA_SHORT=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      - name: Install (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y clang g++-multilib
+          echo "CC=clang" >> $GITHUB_ENV
+          echo "CXX=clang++" >> $GITHUB_ENV
+
+      - name: Add msbuild to PATH (Windows)
+        if: runner.os == 'Windows'
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Getting SourceMod ${{ matrix.sm_version }}
+        uses: actions/checkout@v5.0.0
+        with:
+          repository: alliedmodders/sourcemod
+          ref: ${{ matrix.sm_branch }}
+          path: sourcemod-${{ matrix.sm_version }}
+          submodules: recursive
+
+      - name: Getting MM:Source ${{ matrix.meta_version }}
+        uses: actions/checkout@v5.0.0
+        with:
+          repository: alliedmodders/metamod-source
+          ref: ${{ matrix.meta_branch }}
+          path: metamod-${{ matrix.meta_version }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v6.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Setup AMBuild
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install git+https://github.com/alliedmodders/ambuild
+
+      - name: Getting SDKs
+        shell: bash
+        run: |
+          git clone --mirror https://github.com/alliedmodders/hl2sdk hl2sdk-proxy-repo
+          sdks=(tf2 css hl2dm dods l4d2 l4d sdk2013 bms orangebox)
+          for sdk in "${sdks[@]}"
+          do
+            git clone hl2sdk-proxy-repo -b $sdk hl2sdk-$sdk
+          done
+
+      - name: Getting own repository
+        uses: actions/checkout@v5.0.0
+        with:
+          path: sourcetvmanager
+          submodules: recursive
+
+      - name: Compiling SourceTV Manager files
+        working-directory: sourcetvmanager
+        run: |
+          mkdir build
+          cd build
+          python ../configure.py --enable-optimize --sdks=present --sm-path="${{ github.workspace }}/sourcemod-${{ matrix.sm_version }}" --mms-path="${{ github.workspace }}/metamod-${{ matrix.meta_version }}" --targets x86,x86_64
+          ambuild
+
+      - name: Uploading package
+        uses: actions/upload-artifact@v5.0.0
+        with:
+          name: sourcetvmanager-sm${{ matrix.sm_version }}-${{ matrix.os_short }}
+          path: sourcetvmanager/build/package
+
