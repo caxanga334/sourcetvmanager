@@ -34,6 +34,8 @@ jobs:
 
           - os: windows-latest
             os_short: win
+    env:
+      BREAKPAD_SYMBOL_SERVER: 'http://crash.limetech.org/symbols/submit'
 
     steps:
       - name: Prepare env
@@ -53,6 +55,15 @@ jobs:
       - name: Add msbuild to PATH (Windows)
         if: runner.os == 'Windows'
         uses: microsoft/setup-msbuild@v2
+
+      - name: Clone Mozilla Dump Syms (Windows)
+        uses: actions/checkout@v4
+        with:
+          repository: mozilla/dump_syms
+          path: dump_syms
+
+      - name: Install dump_syms
+        run: cargo install --all-features --path ./dump_syms
 
       - name: Getting SourceMod ${{ matrix.sm_version }}
         uses: actions/checkout@v5.0.0
@@ -100,7 +111,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          python ../configure.py --enable-optimize --sdks=present --sm-path="${{ github.workspace }}/sourcemod-${{ matrix.sm_version }}" --mms-path="${{ github.workspace }}/metamod-${{ matrix.meta_version }}" --targets x86,x86_64
+          python ../configure.py --enable-optimize --sdks=present --sm-path="${{ github.workspace }}/sourcemod-${{ matrix.sm_version }}" --mms-path="${{ github.workspace }}/metamod-${{ matrix.meta_version }}" --targets x86,x86_64 --breakpad-upload
           ambuild
 
       - name: Uploading package
