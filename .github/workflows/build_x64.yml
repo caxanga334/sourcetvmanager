@@ -35,6 +35,7 @@ jobs:
           - os: windows-latest
             os_short: win
     env:
+      USER_BIN_PATH: ${{ github.workspace }}/bins
       BREAKPAD_SYMBOL_SERVER: 'http://crash.limetech.org/symbols/submit'
 
     steps:
@@ -56,14 +57,29 @@ jobs:
         if: runner.os == 'Windows'
         uses: microsoft/setup-msbuild@v2
 
-      - name: Clone Mozilla Dump Syms (Windows)
-        uses: actions/checkout@v4
-        with:
-          repository: mozilla/dump_syms
-          path: dump_syms
 
-      - name: Install dump_syms
-        run: cargo install --all-features --path ./dump_syms
+      # TODO: cache this
+      - name: Install Breakpad dump_syms (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir -p ${{ env.USER_BIN_PATH }}
+          cd ${{ env.USER_BIN_PATH }}
+          Invoke-WebRequest -Uri 'https://github.com/mozilla/dump_syms/releases/download/v2.3.4/dump_syms-x86_64-pc-windows-msvc.zip' -OutFile 'dump_syms-x86_64-pc-windows-msvc.zip'
+          7z x dump_syms-x86_64-pc-windows-msvc.zip
+          ls
+    
+      - name: Install Breakpad dump_syms (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p ${{ env.USER_BIN_PATH }}
+          cd ${{ env.USER_BIN_PATH }}
+          wget https://users.alliedmods.net/~psychonic/dump_syms -O dump_syms
+          ls
+
+      - name: Update Path
+        shell: bash
+        run: |
+          echo "${{ env.USER_BIN_PATH }}" >> "$GITHUB_PATH"
 
       - name: Getting SourceMod ${{ matrix.sm_version }}
         uses: actions/checkout@v5.0.0
