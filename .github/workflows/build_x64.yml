@@ -31,9 +31,11 @@ jobs:
 
           - os: ubuntu-latest
             os_short: linux
+            ambuild_osargs: ''
 
           - os: windows-latest
             os_short: win
+            ambuild_osargs: '--breakpad-upload'
     env:
       USER_BIN_PATH: ${{ github.workspace }}/bins
       BREAKPAD_SYMBOL_SERVER: 'http://crash.limetech.org/symbols/submit'
@@ -66,14 +68,6 @@ jobs:
           cd ${{ env.USER_BIN_PATH }}
           Invoke-WebRequest -Uri 'https://github.com/mozilla/dump_syms/releases/download/v2.3.4/dump_syms-x86_64-pc-windows-msvc.zip' -OutFile 'dump_syms-x86_64-pc-windows-msvc.zip'
           7z x dump_syms-x86_64-pc-windows-msvc.zip
-          ls
-    
-      - name: Install Breakpad dump_syms (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          mkdir -p ${{ env.USER_BIN_PATH }}
-          cd ${{ env.USER_BIN_PATH }}
-          wget https://users.alliedmods.net/~psychonic/dump_syms -O dump_syms
           ls
 
       - name: Update Path
@@ -127,7 +121,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          python ../configure.py --enable-optimize --sdks=present --sm-path="${{ github.workspace }}/sourcemod-${{ matrix.sm_version }}" --mms-path="${{ github.workspace }}/metamod-${{ matrix.meta_version }}" --targets x86,x86_64 --breakpad-upload
+          python ../configure.py --enable-optimize --sdks=present --sm-path="${{ github.workspace }}/sourcemod-${{ matrix.sm_version }}" --mms-path="${{ github.workspace }}/metamod-${{ matrix.meta_version }}" --targets x86,x86_64 ${{ matrix.ambuild_osargs }}
           ambuild
 
       - name: Uploading package
