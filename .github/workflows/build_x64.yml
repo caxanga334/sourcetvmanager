@@ -3,7 +3,7 @@ name: build-x64
 on:
   push:
     branches:
-      - x64-ci
+      - x64-support
     paths-ignore:
       - LICENSE
       - README.md
