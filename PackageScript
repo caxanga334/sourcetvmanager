@@ -10,13 +10,14 @@ folder_list = [
   'addons/sourcemod/extensions',
   'addons/sourcemod/scripting/include',
   'addons/sourcemod/gamedata',
+  'addons/sourcemod/gamedata/sourcetvmanager.games',
   #'addons/sourcemod/configs',
 ]
 
-for cxx_task in Extension.extensions:
-  if cxx_task.target.arch == 'x86_64':
-    folder_list.append('addons/sourcemod/extensions/x64')
-    break
+if 'x86_64' in Extension.target_archs:
+  folder_list.extend([
+    'addons/sourcemod/extensions/x64',
+  ])
 
 # Create the distribution folder hierarchy.
 folder_map = {}
@@ -39,8 +40,14 @@ CopyFiles('', 'addons/sourcemod/scripting/include',
 )
 
 # GameData files
-CopyFiles('', 'addons/sourcemod/gamedata',
-  [ 'sourcetvmanager.games.txt' ]
+CopyFiles('gamedata', 'addons/sourcemod/gamedata/sourcetvmanager.games',
+  [ 
+    'master.games.txt',
+    'common.games.txt',
+    'game.tf.txt',
+    'game.left4dead2.txt',
+    'game.left4dead.txt',
+  ]
 )
 
 # Config Files

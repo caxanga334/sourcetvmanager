@@ -36,7 +36,8 @@ class IClient;
 class CForwardManager;
 class HLTVServerWrapper;
 
-#define NEED_EXECUTESTRINGCMD_CBASECLIENT !defined(WIN32) && SOURCE_ENGINE == SE_TF2
+// Moved to AMBuildScript
+// #define NEED_EXECUTESTRINGCMD_CBASECLIENT !defined(WIN32) && SOURCE_ENGINE == SE_TF2
 
 class CCommonHooks {
 public:
