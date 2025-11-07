@@ -68,6 +68,8 @@ extern ConVar tv_force_steamauth;
 class SourceTVManager : public SDKExtension, public IConCommandBaseAccessor
 {
 public:
+	SourceTVManager();
+
 	/**
 	 * @brief This is called after the initial loading sequence has been processed.
 	 *
@@ -142,6 +144,8 @@ public: // IConCommandBaseAccessor
 public:
 	void SelectSourceTVServer(IHLTVServer *hltv);
 
+	int GetIClientVtableOffset() const { return m_offsetIClientVtable; }
+
 private:
 #if SOURCE_ENGINE == SE_CSGO
 	void OnAddHLTVServer_Post(IHLTVServer *hltv);
@@ -149,6 +153,8 @@ private:
 #else
 	void OnSetHLTVServer_Post(IHLTVServer *hltv);
 #endif
+
+	int m_offsetIClientVtable;
 };
 
 /* Interfaces from SourceMod */

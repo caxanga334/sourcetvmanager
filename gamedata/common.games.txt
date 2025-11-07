@@ -2,6 +2,19 @@
 {
 	"#default"
 	{
+		"Offsets"
+		{
+			"IClient::vtable_offset"
+			{
+				"windows"	"4"
+				"windows64"	"8"
+				"linux"		"4"
+				"linux64"	"8"
+			}
+		}
+	}
+	"#default"
+	{
 		"#supported"
 		{
 			"engine" "csgo"

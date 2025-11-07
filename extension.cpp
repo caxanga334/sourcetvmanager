@@ -33,6 +33,7 @@
 #include "hltvserverwrapper.h"
 #include "forwards.h"
 #include "natives.h"
+#include <amtl/am-platform.h>
 
 IHLTVDirector *hltvdirector = nullptr;
 void *host_client = nullptr;
@@ -71,6 +72,11 @@ extern const sp_nativeinfo_t sourcetv_natives[];
 
 ConVar tv_force_steamauth("tv_force_steamauth", "0", FCVAR_NONE, "Validate SourceTV clients with Steam.");
 
+SourceTVManager::SourceTVManager() :
+	m_offsetIClientVtable(-1)
+{
+}
+
 bool SourceTVManager::SDK_OnLoad(char *error, size_t maxlength, bool late)
 {
 	sharesys->AddDependency(myself, "bintools.ext", true, true);
@@ -86,6 +92,12 @@ bool SourceTVManager::SDK_OnLoad(char *error, size_t maxlength, bool late)
 		return false;
 	}
 
+	if (!g_pGameConf->GetOffset("IClient::vtable_offset", &m_offsetIClientVtable))
+	{
+		ke::SafeSprintf(error, maxlength, "Failed to get offset \"IClient::vtable_offset\" from gamedata file!");
+		return false;
+	}
+
 	// Get the host_client pointer
 	// This is used to fix a null pointer crash when executing fake commands on bots.
 	if (!g_pGameConf->GetAddress("host_client", &host_client) || !host_client)
@@ -96,6 +108,8 @@ bool SourceTVManager::SDK_OnLoad(char *error, size_t maxlength, bool late)
 	g_HLTVServers.InitHooks();
 
 	CDetourManager::Init(smutils->GetScriptingEngine(), g_pGameConf);
+
+	HLTVServerWrapper::SetupDetours();
 
 	sharesys->AddNatives(myself, sourcetv_natives);
 	sharesys->RegisterLibrary(myself, "sourcetvmanager");

@@ -1,6 +1,8 @@
+#include "extension.h"
 #include "hltvserverwrapper.h"
 #include "forwards.h"
 #include "commonhooks.h"
+#include <CDetour/detours.h>
 
 void *old_host_client = nullptr;
 bool g_HostClientOverridden = false;
@@ -24,6 +26,21 @@ static void *FakeNetChanVtbl[FAKE_VTBL_LENGTH];
 static void *FakeNetChan = &FakeNetChanVtbl;
 SH_DECL_MANUALHOOK3(NetChan_SendNetMsg, 0, 0, 0, bool, INetMessage &, bool, bool);
 #endif // SOURCE_ENGINE != SE_CSGO
+
+static CDetour* s_detour_hltvdemorecorder_ctor = nullptr;
+static IDemoRecorder* s_demorecorder = nullptr; // demo recorder we retrieved from the detour
+
+/* Figuring out GetAddress offsets too hard? Just detour and grab the pointer this way! */
+DETOUR_DECL_MEMBER0(CHLTVDemoRecorder_Constructor, void)
+{
+	DETOUR_MEMBER_CALL(CHLTVDemoRecorder_Constructor)();
+
+	s_demorecorder = reinterpret_cast<IDemoRecorder*>(this);
+
+#ifndef NDEBUG
+	smutils->LogMessage(myself, "Obtained demo recorder ptr from detour: %p", s_demorecorder);
+#endif // !NDEBUG
+}
 
 HLTVServerWrapper::HLTVServerWrapper(IHLTVServer *hltvserver)
 {
@@ -150,7 +167,7 @@ void HLTVServerWrapper::Hook()
 			SH_ADD_HOOK(IClient, ClientPrintf, pClient, SH_MEMBER(this, &HLTVServerWrapper::OnIClient_ClientPrintf_Post), false);
 #ifndef WIN32
 			// The IClient vtable is +4 from the CBaseClient vtable due to multiple inheritance.
-			void *pGameClient = (void *)((intptr_t)pClient - 4);
+			void *pGameClient = (void *)((intptr_t)pClient - g_STVManager.GetIClientVtableOffset());
 			if (g_HLTVServers.HasClientPrintfOffset())
 				SH_ADD_MANUALHOOK(CGameClient_ClientPrintf, pGameClient, SH_MEMBER(this, &HLTVServerWrapper::OnCGameClient_ClientPrintf_Post), false);
 #endif // !WIN32
@@ -182,7 +199,7 @@ void HLTVServerWrapper::Unhook()
 			SH_REMOVE_HOOK(IClient, ClientPrintf, pClient, SH_MEMBER(this, &HLTVServerWrapper::OnIClient_ClientPrintf_Post), false);
 #ifndef WIN32
 			// The IClient vtable is +4 from the CBaseClient vtable due to multiple inheritance.
-			void *pGameClient = (void *)((intptr_t)pClient - 4);
+			void *pGameClient = (void *)((intptr_t)pClient - g_STVManager.GetIClientVtableOffset());
 			if (g_HLTVServers.HasClientPrintfOffset())
 				SH_REMOVE_MANUALHOOK(CGameClient_ClientPrintf, pGameClient, SH_MEMBER(this, &HLTVServerWrapper::OnCGameClient_ClientPrintf_Post), false);
 #endif // !WIN32
@@ -228,7 +245,7 @@ bool HLTVServerWrapper::OnHLTVBotExecuteStringCommand(const char *s)
 		RETURN_META_VALUE(MRES_IGNORED, 0);
 
 	// The IClient vtable is +4 from the CBaseClient vtable due to multiple inheritance.
-	void *pGameClient = (void *)((intptr_t)pClient - 4);
+	void *pGameClient = (void *)((intptr_t)pClient - g_STVManager.GetIClientVtableOffset());
 
 	old_host_client = *(void **)host_client;
 	*(void **)host_client = pGameClient;
@@ -247,11 +264,26 @@ bool HLTVServerWrapper::OnHLTVBotExecuteStringCommand_Post(const char *s)
 	RETURN_META_VALUE(MRES_IGNORED, 0);
 }
 
+void HLTVServerWrapper::SetupDetours()
+{
+	void* addr = nullptr;
+
+	if (g_pGameConf->GetMemSig("CHLTVDemoRecorder::Constructor", &addr))
+	{
+		s_detour_hltvdemorecorder_ctor = DETOUR_CREATE_MEMBER(CHLTVDemoRecorder_Constructor, "CHLTVDemoRecorder::Constructor");
+
+		if (s_detour_hltvdemorecorder_ctor)
+		{
+			s_detour_hltvdemorecorder_ctor->EnableDetour();
+		}
+	}
+}
+
 #if SOURCE_ENGINE != SE_CSGO
 void HLTVServerWrapper::OnCGameClient_ClientPrintf_Post(const char* buf)
 {
 	void *pGameClient = META_IFACEPTR(void);
-	IClient *pClient = (IClient *)((intptr_t)pGameClient + 4);
+	IClient *pClient = (IClient *)((intptr_t)pGameClient + g_STVManager.GetIClientVtableOffset());
 	HandleClientPrintf(pClient, buf);
 
 	// We already called the function in HandleClientPrintf.
@@ -282,7 +314,7 @@ void HLTVServerWrapper::HandleClientPrintf(IClient *pClient, const char* buf)
 #ifdef WIN32
 	void *pNetChannel = (void *)((char *)pClient + offset);
 #else
-	void *pNetChannel = (void *)((char *)pClient + offset - 4);
+	void *pNetChannel = (void *)((char *)pClient + offset - g_STVManager.GetIClientVtableOffset());
 #endif
 	// Set our fake netchannel
 	*(void **)pNetChannel = &FakeNetChan;
@@ -445,6 +477,11 @@ int HLTVServerWrapperManager::GetInstanceNumber(IHLTVServer *hltvserver)
 
 IDemoRecorder *HLTVServerWrapperManager::GetDemoRecorderPtr(IHLTVServer *hltv)
 {
+	if (s_demorecorder)
+	{
+		return s_demorecorder;
+	}
+
 	static int offset = -1;
 	if (offset == -1)
 	{

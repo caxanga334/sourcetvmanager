@@ -57,6 +57,8 @@ public:
 	bool OnHLTVBotExecuteStringCommand(const char *s);
 	bool OnHLTVBotExecuteStringCommand_Post(const char *s);
 
+	static void SetupDetours();
+
 private:
 	void Hook();
 	void Unhook();
