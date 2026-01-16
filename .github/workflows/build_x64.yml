@@ -12,11 +12,13 @@ jobs:
   build:
     name: build with sm${{ matrix.sm_version }} on ${{ matrix.os_short }}
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.containerImage }}
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
+        platform:
+          - linux-latest
+          - linux-old
           - windows-latest
 
         sm_version:
@@ -29,16 +31,29 @@ jobs:
           - sm_version: "1.12"
             sm_branch: "1.12-dev"
 
-          - os: ubuntu-latest
+          - platform: linux-latest
+            os: ubuntu-latest
             os_short: linux
             ambuild_osargs: '--breakpad-upload'
+            cc: 'clang'
+            cxx: 'clang++'
 
-          - os: windows-latest
+          - platform: linux-old
+            os: ubuntu-latest
+            os_short: linux-old
+            ambuild_osargs: ''
+            cc: 'clang'
+            cxx: 'clang++'
+            containerImage: 'debian:bullseye'
+
+          - platform: windows-latest
+            os: windows-latest
             os_short: win
             ambuild_osargs: '--breakpad-upload'
     env:
       USER_BIN_PATH: ${{ github.workspace }}/bins
       BREAKPAD_SYMBOL_SERVER: 'http://crash.limetech.org/symbols/submit'
+      IN_CONTAINER: ${{ matrix.containerImage != '' }}
 
     steps:
       - name: Prepare env
@@ -46,14 +61,28 @@ jobs:
         run: |
           echo "GITHUB_SHA_SHORT=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
+      - name: Install Linux container dependencies
+        if: startsWith(runner.os, 'Linux') && env.IN_CONTAINER == 'true'
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata
+          apt-get install -y --no-install-recommends \
+            sudo \
+            git \
+            curl \
+            wget \
+            zstd \
+            build-essential \
+            software-properties-common
+
       - name: Install (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y clang g++-multilib
-          echo "CC=clang" >> $GITHUB_ENV
-          echo "CXX=clang++" >> $GITHUB_ENV
+          sudo apt-get install -y ${{ matrix.cc }} g++-multilib
+          echo "CC=${{ matrix.cc }}" >> $GITHUB_ENV
+          echo "CXX=${{ matrix.cxx }}" >> $GITHUB_ENV
 
       - name: Add msbuild to PATH (Windows)
         if: runner.os == 'Windows'
@@ -69,6 +98,7 @@ jobs:
           ls
 
       - name: Install Breakpad dump_syms (Linux)
+        shell: bash
         if: runner.os == 'Linux'
         run: |
           mkdir -p ${{ env.USER_BIN_PATH }}
@@ -98,9 +128,19 @@ jobs:
           path: metamod-${{ matrix.meta_version }}
 
       - name: Setup Python
+        if: env.IN_CONTAINER == 'false'
         uses: actions/setup-python@v6.0.0
         with:
           python-version: '3.12'
+
+      - name: Setup Python (Container)
+        if: startsWith( runner.os, 'Linux' ) && env.IN_CONTAINER == 'true'
+        shell: bash
+        run: |
+          sudo apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
+          python3 -m pip install packaging
+          python --version
+          pip --version
 
       - name: Setup AMBuild
         run: |
@@ -125,10 +165,11 @@ jobs:
 
       - name: Compiling SourceTV Manager files
         working-directory: sourcetvmanager
+        shell: bash
         run: |
           mkdir build
           cd build
-          python ../configure.py --enable-optimize --sdks=present --sm-path="${{ github.workspace }}/sourcemod-${{ matrix.sm_version }}" --mms-path="${{ github.workspace }}/metamod-${{ matrix.meta_version }}" --targets x86,x86_64 ${{ matrix.ambuild_osargs }}
+          python ../configure.py --enable-optimize --sdks=present --sm-path="$GITHUB_WORKSPACE/sourcemod-${{ matrix.sm_version }}" --mms-path="$GITHUB_WORKSPACE/metamod-${{ matrix.meta_version }}" --targets x86,x86_64 ${{ matrix.ambuild_osargs }}
           ambuild
 
       - name: Uploading package
