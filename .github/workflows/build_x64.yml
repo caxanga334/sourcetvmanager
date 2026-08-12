@@ -44,6 +44,11 @@ jobs:
             os: windows-latest
             os_short: win
             ambuild_osargs: '--breakpad-upload'
+
+          - sdks_to_fetch: 'tf2 css hl2dm dods l4d2 l4d sdk2013 bms orangebox'
+            build_sdks: 'tf2,css,hl2dm,dods,l4d2,l4d,sdk2013,bms,orangebox'
+            ambuild_target: 'x86,x86_64'
+
     env:
       USER_BIN_PATH: ${{ github.workspace }}/bins
       BREAKPAD_SYMBOL_SERVER: 'http://crash.limetech.org/symbols/submit'
@@ -58,6 +63,7 @@ jobs:
         run: |
           echo "dependencies=$GITHUB_WORKSPACE/dependencies" >> $GITHUB_OUTPUT
           echo "basedir=$GITHUB_WORKSPACE" >> $GITHUB_OUTPUT
+          echo "userbins=$GITHUB_WORKSPACE/dependencies" >> $GITHUB_OUTPUT
 
       - name: Prepare env
         shell: bash
@@ -71,33 +77,19 @@ jobs:
       - name: Install Breakpad dump_syms (Windows)
         if: runner.os == 'Windows'
         run: |
-          mkdir -p ${{ env.USER_BIN_PATH }}
-          cd ${{ env.USER_BIN_PATH }}
+          mkdir -p ${{ steps.path_helper.outputs.userbins }}
+          cd ${{ steps.path_helper.outputs.userbins }}
           Invoke-WebRequest -Uri 'https://github.com/mozilla/dump_syms/releases/download/v2.3.7/dump_syms-x86_64-pc-windows-msvc.zip' -OutFile 'dump_syms-x86_64-pc-windows-msvc.zip'
           7z x dump_syms-x86_64-pc-windows-msvc.zip
           ls
-
-      - name: Install Breakpad dump_syms (Linux)
-        shell: bash
-        if: runner.os == 'Linux'
-        run: |
-          mkdir -p ${{ env.USER_BIN_PATH }}
-          cd ${{ env.USER_BIN_PATH }}
-          wget https://github.com/mozilla/dump_syms/releases/download/v2.3.7/dump_syms-x86_64-unknown-linux-gnu.tar.xz
-          tar -xvf dump_syms-x86_64-unknown-linux-gnu.tar.xz --strip-components 1
-          ls
-
-      - name: Update Path
-        shell: bash
-        run: |
-          echo "${{ env.USER_BIN_PATH }}" >> "$GITHUB_PATH"
+          echo "${{ steps.path_helper.outputs.userbins }}" >> "$GITHUB_PATH"
 
       - name: Getting SourceMod ${{ matrix.sm_version }}
         uses: actions/checkout@v7
         with:
           repository: alliedmodders/sourcemod
           ref: ${{ matrix.sm_branch }}
-          path: sourcemod-${{ matrix.sm_version }}
+          path: sourcemod
           submodules: recursive
 
       - name: Getting MM:Source ${{ matrix.meta_version }}
@@ -105,7 +97,7 @@ jobs:
         with:
           repository: alliedmodders/metamod-source
           ref: ${{ matrix.meta_branch }}
-          path: metamod-${{ matrix.meta_version }}
+          path: metamod
 
       - name: Setup Python
         if: runner.os == 'Windows'
@@ -119,15 +111,18 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install git+https://github.com/alliedmodders/ambuild
 
-      - name: Getting SDKs
+      - name: Fetch SDKs
         shell: bash
         run: |
+          mkdir -p '${{ steps.path_helper.outputs.dependencies }}'
+          cd '${{ steps.path_helper.outputs.dependencies }}'
           git clone --mirror https://github.com/alliedmodders/hl2sdk hl2sdk-proxy-repo
-          sdks=(tf2 css hl2dm dods l4d2 l4d sdk2013 bms orangebox)
+          sdks=(${{ matrix.sdks_to_fetch }})
           for sdk in "${sdks[@]}"
           do
             git clone hl2sdk-proxy-repo -b $sdk hl2sdk-$sdk
           done
+          ls -lah
 
       - name: Getting own repository
         uses: actions/checkout@v7
@@ -135,13 +130,20 @@ jobs:
           path: sourcetvmanager
           submodules: recursive
 
-      - name: Compiling SourceTV Manager files
+      - name: Compile Extension
         working-directory: sourcetvmanager
         shell: bash
         run: |
           mkdir build
           cd build
-          python ../configure.py --enable-optimize --sdks=present --sm-path="$GITHUB_WORKSPACE/sourcemod-${{ matrix.sm_version }}" --mms-path="$GITHUB_WORKSPACE/metamod-${{ matrix.meta_version }}" --targets x86,x86_64 ${{ matrix.ambuild_osargs }}
+          python3 ../configure.py \
+          --sdks=${{ matrix.build_sdks }} \
+          --hl2sdk-root="${{ steps.path_helper.outputs.dependencies }}" \
+          --sm-path="${{ steps.path_helper.outputs.basedir }}/sourcemod" \
+          --mms-path="${{ steps.path_helper.outputs.basedir }}/metamod" \
+          --enable-optimize \
+          --targets "${{ matrix.ambuild_target }}" \
+          --symbol-files
           ambuild
 
       - name: Uploading package
