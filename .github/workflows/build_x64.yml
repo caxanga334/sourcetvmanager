@@ -143,7 +143,7 @@ jobs:
           --mms-path="${{ steps.path_helper.outputs.basedir }}/metamod" \
           --enable-optimize \
           --targets "${{ matrix.ambuild_target }}" \
-          --symbol-files
+          --symbol-files ${{ matrix.ambuild_osargs }}
           ambuild
 
       - name: Uploading package
