@@ -18,7 +18,6 @@ jobs:
       matrix:
         platform:
           - linux-latest
-          - linux-old
           - windows-latest
 
         sm_version:
@@ -39,16 +38,7 @@ jobs:
             os: ubuntu-latest
             os_short: linux
             ambuild_osargs: '--breakpad-upload'
-            cc: 'clang'
-            cxx: 'clang++'
-
-          - platform: linux-old
-            os: ubuntu-latest
-            os_short: linux-old
-            ambuild_osargs: ''
-            cc: 'clang'
-            cxx: 'clang++'
-            containerImage: 'debian:bullseye'
+            containerImage: ghcr.io/alliedmodders/build-containers/debian11-clang22:latest
 
           - platform: windows-latest
             os: windows-latest
@@ -60,33 +50,19 @@ jobs:
       IN_CONTAINER: ${{ matrix.containerImage != '' }}
 
     steps:
+      # Largely a workaround for issue where github.workspace doesn't match $GITHUB_WORKSPACE
+      # in containerized jobs. See https://github.com/actions/runner/issues/2058
+      - name: Resolve paths
+        id: path_helper
+        shell: bash
+        run: |
+          echo "dependencies=$GITHUB_WORKSPACE/dependencies" >> $GITHUB_OUTPUT
+          echo "basedir=$GITHUB_WORKSPACE" >> $GITHUB_OUTPUT
+
       - name: Prepare env
         shell: bash
         run: |
           echo "GITHUB_SHA_SHORT=${GITHUB_SHA::7}" >> $GITHUB_ENV
-
-      - name: Install Linux container dependencies
-        if: startsWith(runner.os, 'Linux') && env.IN_CONTAINER == 'true'
-        run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata
-          apt-get install -y --no-install-recommends \
-            sudo \
-            git \
-            curl \
-            wget \
-            zstd \
-            build-essential \
-            software-properties-common
-
-      - name: Install (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install -y ${{ matrix.cc }} g++-multilib
-          echo "CC=${{ matrix.cc }}" >> $GITHUB_ENV
-          echo "CXX=${{ matrix.cxx }}" >> $GITHUB_ENV
 
       - name: Add msbuild to PATH (Windows)
         if: runner.os == 'Windows'
@@ -132,21 +108,13 @@ jobs:
           path: metamod-${{ matrix.meta_version }}
 
       - name: Setup Python
-        if: env.IN_CONTAINER == 'false'
+        if: runner.os == 'Windows'
         uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-
-      - name: Setup Python (Container)
-        if: startsWith( runner.os, 'Linux' ) && env.IN_CONTAINER == 'true'
-        shell: bash
-        run: |
-          sudo apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-          python3 -m pip install packaging
-          python --version
-          pip --version
-
+  
       - name: Setup AMBuild
+        if: runner.os == 'Windows'
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install git+https://github.com/alliedmodders/ambuild
