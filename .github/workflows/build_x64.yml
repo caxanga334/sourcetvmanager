@@ -37,13 +37,13 @@ jobs:
           - platform: linux-latest
             os: ubuntu-latest
             os_short: linux
-            ambuild_osargs: '--breakpad-upload'
+            ambuild_osargs: ''
             containerImage: ghcr.io/alliedmodders/build-containers/debian11-clang22:latest
 
           - platform: windows-latest
             os: windows-latest
             os_short: win
-            ambuild_osargs: '--breakpad-upload'
+            ambuild_osargs: ''
 
           - sdks_to_fetch: 'tf2 css hl2dm dods l4d2 l4d sdk2013 bms orangebox'
             build_sdks: 'tf2,css,hl2dm,dods,l4d2,l4d,sdk2013,bms,orangebox'
